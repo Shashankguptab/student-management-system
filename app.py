@@ -1,95 +1,90 @@
+from flask import Flask, render_template, request, redirect
 import mysql.connector
 
-# database connection
-conn = mysql.connector.connect(
-    host="localhost", user="root", password="Royal@580", database="student_db"
-)
+app = Flask(__name__)
 
-cursor = conn.cursor()
-
-# create table
-cursor.execute(
-    """
-create table if not exists students (
-    id int auto_increment primary key,
-    name varchar(50),
-    age int,
-    course varchar(50)
-)
-"""
-)
+db_config = {
+    "host": "localhost",
+    "user": "root",
+    "password": "Royal@580",
+    "database": "student_db",
+}
 
 
-# add student
+def get_connection():
+    return mysql.connector.connect(**db_config)
+
+
+@app.route("/")
+def index():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM students")
+    students = cursor.fetchall()
+    conn.close()
+    return render_template("index.html", students=students)
+
+
+@app.route("/add", methods=["POST"])
 def add_student():
-    name = input("enter name: ")
-    age = int(input("enter age: "))
-    course = input("enter course: ")
+    name = request.form["name"]
+    age = request.form["age"]
+    course = request.form["course"]
 
-    query = "insert into students (name, age, course) values (%s, %s, %s)"
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = "INSERT INTO students (name, age, course) VALUES (%s, %s, %s)"
     cursor.execute(query, (name, age, course))
     conn.commit()
-    print("student added successfully")
+    conn.close()
+
+    return redirect("/")
 
 
-# view students
-def view_students():
-    cursor.execute("select * from students")
-    data = cursor.fetchall()
+@app.route("/delete/<int:id>")
+def delete_student(id):
+    conn = get_connection()
+    cursor = conn.cursor()
 
-    print("\n--- student list ---")
-    for row in data:
-        print(row)
-
-
-# update student
-def update_student():
-    student_id = int(input("enter student id to update: "))
-    new_name = input("enter new name: ")
-    new_age = int(input("enter new age: "))
-    new_course = input("enter new course: ")
-
-    query = """
-    update students
-    set name=%s, age=%s, course=%s
-    where id=%s
-    """
-    cursor.execute(query, (new_name, new_age, new_course, student_id))
+    cursor.execute("DELETE FROM students WHERE id=%s", (id,))
     conn.commit()
-    print("student updated successfully")
+    conn.close()
+
+    return redirect("/")
 
 
-# delete student
-def delete_student():
-    student_id = int(input("enter student id to delete: "))
+@app.route("/edit/<int:id>")
+def edit_student(id):
+    conn = get_connection()
+    cursor = conn.cursor()
 
-    query = "delete from students where id=%s"
-    cursor.execute(query, (student_id,))
+    cursor.execute("SELECT * FROM students WHERE id=%s", (id,))
+    student = cursor.fetchone()
+    conn.close()
+
+    return render_template("edit.html", student=student)
+
+
+@app.route("/update/<int:id>", methods=["POST"])
+def update_student(id):
+    name = request.form["name"]
+    age = request.form["age"]
+    course = request.form["course"]
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "UPDATE students SET name=%s, age=%s, course=%s WHERE id=%s",
+        (name, age, course, id),
+    )
+
     conn.commit()
-    print("student deleted successfully")
+    conn.close()
+
+    return redirect("/")
 
 
-# main menu
-while True:
-    print("\n1. add student")
-    print("2. view students")
-    print("3. update student")
-    print("4. delete student")
-    print("5. exit")
-
-    choice = input("enter choice: ")
-
-    if choice == "1":
-        add_student()
-    elif choice == "2":
-        view_students()
-    elif choice == "3":
-        update_student()
-    elif choice == "4":
-        delete_student()
-    elif choice == "5":
-        break
-    else:
-        print("invalid choice")
-
-conn.close()
+if __name__ == "__main__":
+    app.run(debug=True)
