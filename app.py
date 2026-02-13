@@ -1,62 +1,66 @@
-from flask import Flask, render_template, request, redirect
-import sqlite3
+from flask import Flask, render_template, request, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+import os
 
 app = Flask(__name__)
 
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///students.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-def get_db():
-    conn = sqlite3.connect("students.db")
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-# create table
-def init_db():
-    conn = get_db()
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            age INTEGER,
-            course TEXT
-        )
-    """
-    )
-    conn.commit()
-    conn.close()
+db = SQLAlchemy(app)
 
 
-init_db()
+# -----------------------------
+# Database Model
+# -----------------------------
+class Student(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), nullable=False)
+    course = db.Column(db.String(100), nullable=False)
+
+    def __repr__(self):
+        return f"<Student {self.name}>"
 
 
-@app.route("/")
+# -----------------------------
+# Routes
+# -----------------------------
+
+@app.route('/')
 def index():
-    conn = get_db()
-    students = conn.execute("SELECT * FROM students").fetchall()
-    conn.close()
-    return render_template("index.html", students=students)
+    students = Student.query.all()
+    return render_template('index.html', students=students)
 
 
-@app.route("/add", methods=["GET", "POST"])
-def add():
-    if request.method == "POST":
-        name = request.form["name"]
-        age = request.form["age"]
-        course = request.form["course"]
+@app.route('/add', methods=['POST'])
+def add_student():
+    name = request.form['name']
+    email = request.form['email']
+    course = request.form['course']
 
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO students (name, age, course) VALUES (?, ?, ?)",
-            (name, age, course),
-        )
-        conn.commit()
-        conn.close()
+    new_student = Student(name=name, email=email, course=course)
+    db.session.add(new_student)
+    db.session.commit()
 
-        return redirect("/")
-
-    return render_template("add.html")
+    return redirect(url_for('index'))
 
 
+@app.route('/delete/<int:id>')
+def delete_student(id):
+    student = Student.query.get_or_404(id)
+    db.session.delete(student)
+    db.session.commit()
+    return redirect(url_for('index'))
+
+
+# -----------------------------
+# Run App (Important for Render)
+# -----------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    with app.app_context():
+        db.create_all()
+
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
